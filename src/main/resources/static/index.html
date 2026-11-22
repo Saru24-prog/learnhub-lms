@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="/js/api.js"></script>
+  <script>
+    const u = auth.user();
+    location.replace(auth.token() && u ? homeFor(u.role) : "/login.html");
+  </script>
+</head>
+<body></body>
+</html>

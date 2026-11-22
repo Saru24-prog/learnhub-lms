@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LearnHub | Student Portal</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/content.js"></script>
+<script src="/js/assignments.js"></script>
+<script>
+let allCourses = [];
+
+startApp("STUDENT", {
+  home:   { label: "Dashboard",      render: renderHome },
+  my:     { label: "My Courses",     render: renderMyCourses },
+  browse: { label: "Browse Courses", render: renderBrowse },
+  course: { hidden: true, parent: "my", render: renderStudentCourse }   // #course/5
+});
+
+// ---------- One course: weekly content ----------
+async function renderStudentCourse(id) {
+  $("main").innerHTML = `
+    <a class="back" onclick="go('my')">← Back to My Courses</a>
+    <div id="hero"></div>
+    <div id="content"><div class="panel"><div class="empty">Loading...</div></div></div>
+    <div id="assignments"></div>`;
+  try {
+    const data = await renderContent(id);
+    const c = data.course;
+    $("hero").innerHTML = `
+      <div class="course-hero" style="background-color:${courseColor(c.id)}">
+        <small>${esc(c.code)} · ${esc(c.lecturerName)}</small>
+        <h1>${esc(c.title)}</h1>
+        <p>${esc(c.description)}</p>
+      </div>`;
+    await renderAssignments(id, false);
+  } catch (e) {
+    toast(e.message || "Cannot open this course", "error");
+    go("my");
+  }
+}
+
+// ---------- Dashboard ----------
+async function renderHome() {
+  const [mine, all] = await Promise.all([api("/api/student/courses/my"), api("/api/student/courses")]);
+  $("main").innerHTML = `
+    <div class="page-title"><h1>Welcome back, ${esc(me.fullName.split(" ")[0])}</h1><p>${today()}</p></div>
+    ${statCards([
+      ["Enrolled Courses", mine.length],
+      ["Available Courses", all.length - mine.length],
+      ["Pending Assignments", 0]
+    ])}
+    <div class="page-head" style="margin-bottom:16px">
+      <h2 style="font-size:18px">My Courses</h2>
+      <button class="btn btn-light btn-sm" onclick="go('browse')">Browse all courses →</button>
+    </div>
+    ${mine.length
+      ? `<div class="courses">${mine.map(c => courseCard(c, "my")).join("")}</div>`
+      : `<div class="panel"><div class="empty">You are not enrolled in any course yet.<br><br>
+           <button class="btn btn-primary" onclick="go('browse')">Browse courses</button></div></div>`}`;
+}
+
+// ---------- My Courses ----------
+async function renderMyCourses() {
+  const mine = await api("/api/student/courses/my");
+  $("main").innerHTML = `
+    <div class="page-title"><h1>My Courses</h1><p>Courses you are enrolled in</p></div>
+    ${mine.length
+      ? `<div class="courses">${mine.map(c => courseCard(c, "my")).join("")}</div>`
+      : `<div class="panel"><div class="empty">You are not enrolled in any course yet.<br><br>
+           <button class="btn btn-primary" onclick="go('browse')">Browse courses</button></div></div>`}`;
+}
+
+// ---------- Browse all courses ----------
+async function renderBrowse() {
+  allCourses = await api("/api/student/courses");
+  $("main").innerHTML = `
+    <div class="page-title"><h1>Browse Courses</h1><p>Ask your lecturer for the enrollment key to join a course</p></div>
+    <div class="toolbar"><input id="search" class="search" placeholder="Search by code, title or lecturer..." oninput="filterBrowse()"></div>
+    <div id="browseList"></div>`;
+  filterBrowse();
+}
+
+function filterBrowse() {
+  const q = $("search").value.toLowerCase();
+  const list = allCourses.filter(c => (c.code + " " + c.title + " " + c.lecturerName).toLowerCase().includes(q));
+  $("browseList").innerHTML = list.length
+    ? `<div class="courses">${list.map(c => courseCard(c, "browse")).join("")}</div>`
+    : `<div class="panel"><div class="empty">No courses found.</div></div>`;
+}
+
+function courseCard(c, mode) {
+  let actions;
+  if (mode === "my") {
+    actions = `<button class="btn btn-primary btn-sm" onclick="go('course', ${c.id})">Open</button>
+               <button class="btn btn-danger btn-sm" onclick="unenroll(${c.id}, '${esc(c.code)}')">Unenroll</button>`;
+  } else if (c.enrolled) {
+    actions = `<button class="btn btn-primary btn-sm" onclick="go('course', ${c.id})">Open</button>
+               <span class="badge tag-ok">✓ Enrolled</span>`;
+  } else {
+    actions = `<button class="btn btn-primary btn-sm" onclick="enrollForm(${c.id}, '${esc(c.code)}')">Enroll</button>`;
+  }
+  return `
+    <div class="course">
+      <div class="course-top" style="background-color:${courseColor(c.id)}">
+        <span>${esc(c.code)}</span>
+        ${c.enrolled && mode === "browse" ? '<span class="tag">Enrolled</span>' : ""}
+      </div>
+      <div class="course-body">
+        <h3>${esc(c.title)}</h3>
+        <p>${esc(c.description) || "No description"}</p>
+        <div class="course-meta">
+          <span>${esc(c.lecturerName)}</span>
+          <span>${c.studentCount}</span>
+        </div>
+      </div>
+      <div class="course-actions">${actions}</div>
+    </div>`;
+}
+
+// ---------- Enroll with key ----------
+function enrollForm(id, code) {
+  openModal(`Enroll in ${code}`, `
+      <p class="muted" style="font-size:14px;margin-bottom:16px">Enter the enrollment key given by your lecturer.</p>
+      ${field("enrollmentKey", "Enrollment key *", { placeholder: "e.g. oop2026" })}`,
+    async () => {
+      await api(`/api/student/courses/${id}/enroll`, {
+        method: "POST",
+        body: JSON.stringify({ enrollmentKey: val("enrollmentKey") })
+      });
+      toast(`Enrolled in ${code} 🎉`);
+      route();
+    },
+    "Enroll");
+}
+
+async function unenroll(id, code) {
+  if (!confirm(`Unenroll from ${code}?`)) return;
+  try {
+    await api(`/api/student/courses/${id}/enroll`, { method: "DELETE" });
+    toast(`Unenrolled from ${code}`);
+    route();
+  } catch (e) { toast(e.message || "Failed", "error"); }
+}
+</script>
+</body>
+</html>

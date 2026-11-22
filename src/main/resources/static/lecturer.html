@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LearnHub | Lecturer Portal</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/content.js"></script>
+<script src="/js/assignments.js"></script>
+<script src="/js/courses.js"></script>
+<script>
+startApp("LECTURER", {
+  home:    { label: "Dashboard",  render: renderHome },
+  courses: { label: "My Courses", render: renderCourses },
+  course:  { hidden: true, parent: "courses", render: renderCourseDetail }   // #course/5
+});
+
+// ---------- Dashboard ----------
+async function renderHome() {
+  myCourses = await api("/api/lecturer/courses");
+  const total = myCourses.reduce((sum, c) => sum + c.studentCount, 0);
+  $("main").innerHTML = `
+    <div class="page-head">
+      <div class="page-title"><h1>Welcome, ${esc(me.fullName.split(" ")[0])}</h1><p>${today()}</p></div>
+      <button class="btn btn-primary" onclick="courseForm()">+ New Course</button>
+    </div>
+    ${statCards([
+      ["Courses Teaching", myCourses.length],
+      ["Total Students", total],
+      ["Avg. Students / Course", myCourses.length ? Math.round(total / myCourses.length) : 0]
+    ])}
+    <div class="panel">
+      <div class="panel-head"><h2>My Courses</h2></div>
+      ${myCourses.length ? `
+        <table>
+          <thead><tr><th>Code</th><th>Title</th><th>Students</th><th class="hide-sm">Enrollment key</th></tr></thead>
+          <tbody>${myCourses.map(c => `
+            <tr class="clickable" onclick="go('course', ${c.id})">
+              <td><b>${esc(c.code)}</b></td>
+              <td>${esc(c.title)}</td>
+              <td>${c.studentCount}</td>
+              <td class="hide-sm"><span class="key">${esc(c.enrollmentKey)}</span></td>
+            </tr>`).join("")}
+          </tbody>
+        </table>`
+      : `<div class="empty">You haven't created any courses yet. Click <b>+ New Course</b> to start.</div>`}
+    </div>`;
+}
+
+</script>
+</body>
+</html>

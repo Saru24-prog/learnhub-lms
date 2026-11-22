@@ -1,0 +1,17 @@
+# Build output
+target/
+
+# Secrets - never upload
+local.properties
+
+# Uploaded student files
+uploads/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Other
+*.zip
+*.log

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LearnHub | Admin Portal</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<main class="main" id="main"></main>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script src="/js/content.js"></script>
+<script src="/js/assignments.js"></script>
+<script src="/js/courses.js"></script>
+<script>
+let allUsers = [];
+
+startApp("ADMIN", {
+  home:    { label: "Dashboard",     render: renderHome },
+  users:   { label: "Manage Users",  render: renderUsers },
+  courses: { label: "Courses",       render: renderCourses },
+  course:  { hidden: true, parent: "courses", render: renderCourseDetail }   // #course/5
+});
+
+// ---------- Dashboard ----------
+async function renderHome() {
+  const [users, courses] = await Promise.all([api("/api/admin/users"), api("/api/admin/courses")]);
+  const count = r => users.filter(u => u.role === r).length;
+  const enrollments = courses.reduce((s, c) => s + c.studentCount, 0);
+  const recent = [...users].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+
+  $("main").innerHTML = `
+    <div class="page-head">
+      <div class="page-title"><h1>Welcome, ${esc(me.fullName.split(" ")[0])}</h1><p>${today()}</p></div>
+      <button class="btn btn-primary" onclick="myCourses = []; courseForm()">+ New Course</button>
+    </div>
+    ${statCards([
+      ["Total Users", users.length],
+      ["Lecturers", count("LECTURER")],
+      ["Students", count("STUDENT")],
+      ["Courses", courses.length],
+      ["Enrollments", enrollments]
+    ])}
+    <div class="panel">
+      <div class="panel-head"><h2>Newest Users</h2>
+        <button class="btn btn-light btn-sm" onclick="go('users')">Manage users →</button></div>
+      <table>
+        <thead><tr><th>User</th><th>Role</th><th class="hide-sm">Joined</th></tr></thead>
+        <tbody>${recent.map(u => `
+          <tr>
+            <td><div class="person"><div class="avatar">${esc(initials(u.fullName))}</div>
+              <div>${esc(u.fullName)}<small>${esc(u.email)}</small></div></div></td>
+            <td><span class="badge ${u.role}">${u.role}</span></td>
+            <td class="hide-sm">${fmtDate(u.createdAt)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ---------- Manage users ----------
+async function renderUsers() {
+  allUsers = await api("/api/admin/users");
+  $("main").innerHTML = `
+    <div class="page-title"><h1>Manage Users</h1><p>Make a user a lecturer by changing their role</p></div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>All Users (${allUsers.length})</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <select id="roleFilter" onchange="filterUsers()">
+            <option value="">All roles</option><option>ADMIN</option><option>LECTURER</option><option>STUDENT</option>
+          </select>
+          <input id="userSearch" class="search" placeholder="Search name or email..." oninput="filterUsers()">
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>User</th><th>Role</th><th class="hide-sm">Joined</th><th>Change role</th></tr></thead>
+        <tbody id="userRows"></tbody>
+      </table>
+    </div>`;
+  filterUsers();
+}
+
+function filterUsers() {
+  const q = $("userSearch").value.toLowerCase();
+  const role = $("roleFilter").value;
+  const list = allUsers.filter(u =>
+    (u.fullName + " " + u.email).toLowerCase().includes(q) && (!role || u.role === role));
+  $("userRows").innerHTML = list.length ? list.map(u => `
+    <tr>
+      <td><div class="person"><div class="avatar">${esc(initials(u.fullName))}</div>
+        <div>${esc(u.fullName)}<small>${esc(u.email)}</small></div></div></td>
+      <td><span class="badge ${u.role}">${u.role}</span></td>
+      <td class="hide-sm">${fmtDate(u.createdAt)}</td>
+      <td>${u.email === me.email
+        ? '<span class="muted">You</span>'
+        : `<select onchange="changeRole(${u.id}, this.value)">
+             ${["STUDENT", "LECTURER", "ADMIN"].map(r => `<option ${r === u.role ? "selected" : ""}>${r}</option>`).join("")}
+           </select>`}</td>
+    </tr>`).join("") : `<tr><td colspan="4" class="empty">No users found</td></tr>`;
+}
+
+async function changeRole(id, role) {
+  try {
+    await api(`/api/admin/users/${id}/role?role=${role}`, { method: "PUT" });
+    toast("Role changed to " + role);
+    renderUsers();
+  } catch (e) { toast(e.message || "Failed to change role", "error"); }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LearnHub | Login</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="auth">
+  <div class="auth-brand">
+    <h1>🎓 LearnHub</h1>
+    <p>Your online learning space. Access course materials, submit assignments and track your grades in one place.</p>
+    <ul>
+      <li>📚 Weekly course content</li>
+      <li>📝 Online assignment submission</li>
+      <li>📊 Grades and feedback</li>
+    </ul>
+  </div>
+
+  <div class="auth-form">
+    <div class="card">
+      <div class="tabs">
+        <button id="tabLogin" class="active" onclick="showTab('login')">Login</button>
+        <button id="tabRegister" onclick="showTab('register')">Register</button>
+      </div>
+
+      <div id="alert" class="alert hidden"></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
+        <div class="field"><label>Password</label><input id="loginPassword" type="password" placeholder="••••••"></div>
+        <button class="btn btn-primary" style="width:100%">Login</button>
+      </form>
+
+      <form id="registerForm" class="hidden" novalidate>
+        <div class="field"><label>Full name</label><input id="fullName"><div class="err" id="fullNameErr"></div></div>
+        <div class="field"><label>Email</label><input id="email" type="email"><div class="err" id="emailErr"></div></div>
+        <div class="field"><label>Password</label><input id="password" type="password"><div class="err" id="passwordErr"></div></div>
+        <button class="btn btn-primary" style="width:100%">Create account</button>
+      </form>
+
+      <p class="hint">Demo admin: admin@learnhub.com / admin123</p>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+if (auth.token() && auth.user()) location.replace(homeFor(auth.user().role));
+const $ = id => document.getElementById(id);
+
+function showTab(t) {
+  $("loginForm").classList.toggle("hidden", t !== "login");
+  $("registerForm").classList.toggle("hidden", t !== "register");
+  $("tabLogin").classList.toggle("active", t === "login");
+  $("tabRegister").classList.toggle("active", t === "register");
+  $("alert").classList.add("hidden");
+}
+
+function showAlert(msg) { $("alert").textContent = msg; $("alert").classList.remove("hidden"); }
+
+async function submit(form, url, body, showFieldErrors) {
+  const btn = form.querySelector("button");
+  btn.disabled = true;
+  $("alert").classList.add("hidden");
+  ["fullName", "email", "password"].forEach(f => $(f + "Err").textContent = "");
+  try {
+    const data = await api(url, { method: "POST", body: JSON.stringify(body) });
+    auth.save(data);
+    location.href = homeFor(data.role);
+  } catch (err) {
+    if (!err.status) showAlert("Cannot connect to server");
+    else if (err.errors && showFieldErrors) Object.entries(err.errors).forEach(([k, v]) => $(k + "Err").textContent = v);
+    else if (err.errors) showAlert(Object.values(err.errors).join(", "));
+    else showAlert(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("loginForm").onsubmit = e => {
+  e.preventDefault();
+  submit(e.target, "/api/auth/login",
+    { email: $("loginEmail").value, password: $("loginPassword").value }, false);
+};
+
+$("registerForm").onsubmit = e => {
+  e.preventDefault();
+  submit(e.target, "/api/auth/register",
+    { fullName: $("fullName").value, email: $("email").value, password: $("password").value }, true);
+};
+</script>
+</body>
+</html>
